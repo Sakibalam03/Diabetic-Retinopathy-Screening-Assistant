@@ -144,19 +144,28 @@ def generate_pdf(result: dict, patient_info: dict) -> bytes:
     raw_bytes = result.get("raw_bytes")
     hm_bytes  = result.get("heatmap_bytes")
 
-    if raw_bytes:
+    if raw_bytes or hm_bytes:
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_fill_color(240, 240, 255)
-        pdf.cell(0, 8, "FUNDUS IMAGE", new_x="LMARGIN", new_y="NEXT", fill=True)
-        pdf.image(Image.open(io.BytesIO(raw_bytes)), x=10, w=90)
-        pdf.ln(2)
+        # One full-width header row with both labels
+        col_w = 95  # ~half of usable 190mm width
+        if raw_bytes and hm_bytes:
+            pdf.cell(col_w, 8, "FUNDUS IMAGE", fill=True)
+            pdf.cell(col_w, 8, "GRAD-CAM LESION HEATMAP", new_x="LMARGIN", new_y="NEXT", fill=True)
+        elif raw_bytes:
+            pdf.cell(0, 8, "FUNDUS IMAGE", new_x="LMARGIN", new_y="NEXT", fill=True)
+        else:
+            pdf.cell(0, 8, "GRAD-CAM LESION HEATMAP", new_x="LMARGIN", new_y="NEXT", fill=True)
 
-    if hm_bytes:
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.set_fill_color(240, 240, 255)
-        pdf.cell(0, 8, "GRAD-CAM LESION HEATMAP", new_x="LMARGIN", new_y="NEXT", fill=True)
-        pdf.image(Image.open(io.BytesIO(hm_bytes)), x=10, w=90)
-        pdf.ln(2)
+        img_y = pdf.get_y()
+        img_w = 88  # leaves a small gutter between images
+        if raw_bytes:
+            pdf.image(Image.open(io.BytesIO(raw_bytes)), x=10, y=img_y, w=img_w)
+        if hm_bytes:
+            x_right = 10 + img_w + 4  # 4mm gutter
+            pdf.image(Image.open(io.BytesIO(hm_bytes)), x=x_right, y=img_y, w=img_w)
+        # Advance cursor past the images (images are square ~img_w tall)
+        pdf.set_y(img_y + img_w + 2)
 
     # Footer
     pdf.set_font("Helvetica", "I", 8)
