@@ -1,0 +1,45 @@
+# ── Credentials (never commit) ────────────────────────────────────────────────
+.env
+
+# ── Datasets (too large; downloaded via download_data.py) ─────────────────────
+data/raw/
+data/yolo/
+data/grading/
+data/_tmp*/
+
+# ── Temporary / scratch ───────────────────────────────────────────────────────
+data/_tmp_aptos/
+data/_tmp_dr224/
+
+# ── Generated inference outputs ───────────────────────────────────────────────
+outputs/
+
+# ── YOLOv8 detector weights (not needed to run the app) ───────────────────────
+runs/detector/
+
+# ── Training logs ─────────────────────────────────────────────────────────────
+runs/grader/train_log.txt
+
+# ── Python bytecode ───────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── Claude IDE workspace ──────────────────────────────────────────────────────
+.claude/
+
+# ── Personal documents (not needed to run the project) ───────────────────────
+dr-sample-plan.docx
+VIVA_REPORT.txt
+PROJECT_WALKTHROUGH.txt
+
+# ── OS noise ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
