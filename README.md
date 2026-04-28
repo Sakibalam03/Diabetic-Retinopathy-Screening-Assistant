@@ -24,7 +24,7 @@ Upload a colour fundus photograph. The system will:
 
 | Screening UI | PDF Report |
 |---|---|
-| ![UI](outputs/ui_screenshot.png) | ![PDF](outputs/pdf_screenshot.png) |
+| ![UI](https://raw.githubusercontent.com/Sakibalam03/Diabetic-Retinopathy-Screening-Assistant/refs/heads/main/Sample-Outputs/Screenshot%202026-03-27%20224738.png) | ![PDF](https://raw.githubusercontent.com/Sakibalam03/Diabetic-Retinopathy-Screening-Assistant/refs/heads/main/Sample-Outputs/Screenshot%202026-03-27%20225223.png) |
 
 > Upload a fundus image on the right, fill in patient details on the left, click **Save Patient Details**, then download the report.
 
