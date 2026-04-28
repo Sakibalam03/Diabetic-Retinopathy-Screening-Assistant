@@ -18,6 +18,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import argparse
+import streamlit as st
 from pathlib import Path
 from PIL import Image
 from torchvision import transforms, models
@@ -36,8 +37,16 @@ GRADE_COLORS = [
 ]
 
 
+# ── Device detection ──────────────────────────────────────────────────────────
+def get_device() -> torch.device:
+    # TODO(human): detect and return the best available torch.device
+    # Check CUDA first, then Apple MPS, then fall back to CPU
+    pass
+
+
 # ── Model loader ──────────────────────────────────────────────────────────────
-def load_grader():
+@st.cache_resource
+def load_grader(device: torch.device) -> nn.Module:
     if not Path(GRADER_WEIGHTS).exists():
         raise FileNotFoundError(
             f"Weights not found at {GRADER_WEIGHTS}. Run train_grader.py first."
@@ -60,7 +69,7 @@ def load_grader():
         )
     m.load_state_dict(ckpt["model_state"])
     m.eval()
-    return m
+    return m.to(device)
 
 
 # ── CLAHE enhancement ─────────────────────────────────────────────────────────
@@ -105,13 +114,13 @@ class GradCAM:
 
 
 # ── Grading ───────────────────────────────────────────────────────────────────
-def run_inference(model: nn.Module, image_path: str):
+def run_inference(model: nn.Module, image_path: str, device: torch.device):
     tfm = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
-    tensor = tfm(Image.open(image_path).convert("RGB")).unsqueeze(0)
+    tensor = tfm(Image.open(image_path).convert("RGB")).unsqueeze(0).to(device)
     tensor.requires_grad_(True)
 
     with torch.enable_grad():
@@ -145,8 +154,9 @@ def predict(image_path: str) -> dict | None:
     h, w     = img.shape[:2]
     enhanced = enhance(img)
 
-    model             = load_grader()
-    grade, probs, cam = run_inference(model, image_path)
+    device            = get_device()
+    model             = load_grader(device)
+    grade, probs, cam = run_inference(model, image_path, device)
     referral          = grade >= 2
 
     # ── Print report ──────────────────────────────────────────────────────────

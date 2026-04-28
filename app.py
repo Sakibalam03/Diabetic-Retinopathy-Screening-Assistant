@@ -14,7 +14,7 @@ import streamlit as st
 from datetime import datetime
 from fpdf import FPDF, XPos, YPos
 from PIL import Image
-from predict import predict
+from predict import predict, get_device
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -214,6 +214,7 @@ with st.sidebar:
         st.markdown(f"<span style='color:{color}'>●</span> Grade {i}: {name}", unsafe_allow_html=True)
     st.markdown("---")
     st.info("Referral required for Grade 2 (Moderate) and above.")
+    st.caption(f"Running on: {str(get_device()).upper()}")
 
 # ── Main upload & inference ───────────────────────────────────────────────────
 uploaded = st.file_uploader("Upload a fundus image", type=["jpg", "jpeg", "png"])
