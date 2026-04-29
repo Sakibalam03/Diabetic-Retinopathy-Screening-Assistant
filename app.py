@@ -8,8 +8,6 @@ Usage:
 
 import base64
 import io
-import os
-import tempfile
 import streamlit as st
 from datetime import datetime
 from fpdf import FPDF, XPos, YPos
@@ -225,18 +223,12 @@ if uploaded:
 
     # Run inference only when a NEW file is uploaded (cache result by file_id)
     if st.session_state.get("file_id") != uploaded.file_id:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            tmp.write(raw_bytes)
-            tmp_path = tmp.name
-
         with st.spinner("Running DR screening pipeline..."):
             try:
-                result = predict(tmp_path)
+                result = predict(raw_bytes)
             except Exception as e:
                 st.error(f"Pipeline error: {e}")
                 result = None
-
-        os.unlink(tmp_path)
 
         if result:
             result["raw_bytes"] = raw_bytes

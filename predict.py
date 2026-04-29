@@ -14,6 +14,7 @@ Output (CLI only):
 """
 
 import cv2
+import io
 import numpy as np
 import torch
 import torch.nn as nn
@@ -114,13 +115,13 @@ class GradCAM:
 
 
 # ── Grading ───────────────────────────────────────────────────────────────────
-def run_inference(model: nn.Module, image_path: str, device: torch.device):
+def run_inference(model: nn.Module, image_source, device: torch.device):
     tfm = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
-    tensor = tfm(Image.open(image_path).convert("RGB")).unsqueeze(0).to(device)
+    tensor = tfm(Image.open(image_source).convert("RGB")).unsqueeze(0).to(device)
     tensor.requires_grad_(True)
 
     with torch.enable_grad():
@@ -140,30 +141,37 @@ def _encode_jpg(img_bgr: np.ndarray) -> bytes:
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
-def predict(image_path: str) -> dict | None:
+def predict(image_input: bytes | str) -> dict | None:
     """
     Run DR screening inference.
 
     Returns a dict with grade, probs, confidence, referral, and image bytes.
     Images are returned as JPEG bytes — no files are written to disk.
     """
-    img = cv2.imread(image_path)
+    if isinstance(image_input, bytes):
+        arr        = np.frombuffer(image_input, np.uint8)
+        img        = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        pil_source = io.BytesIO(image_input)
+    else:
+        img        = cv2.imread(image_input)
+        pil_source = image_input
+
     if img is None:
-        print(f"ERROR: Cannot read {image_path}")
+        print("ERROR: Cannot read image")
         return None
     h, w     = img.shape[:2]
     enhanced = enhance(img)
 
     device            = get_device()
     model             = load_grader(device)
-    grade, probs, cam = run_inference(model, image_path, device)
+    grade, probs, cam = run_inference(model, pil_source, device)
     referral          = grade >= 2
 
     # ── Print report ──────────────────────────────────────────────────────────
     print("\n" + "=" * 52)
     print("    DIABETIC RETINOPATHY SCREENING RESULT")
     print("=" * 52)
-    print(f"  Image      : {image_path}")
+    print(f"  Image      : {image_input if isinstance(image_input, str) else '<bytes>'}")
     print(f"  Grade      : {grade} - {CLASS_NAMES[grade]}")
     print(f"  Confidence : {probs[grade]:.1%}")
     print(f"  Referral   : {'YES - See ophthalmologist' if referral else 'No'}")
@@ -205,8 +213,9 @@ def predict(image_path: str) -> dict | None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="DR Screening Inference")
     parser.add_argument("--image", required=True, help="Path to fundus image")
-    args   = parser.parse_args()
-    result = predict(args.image)
+    args = parser.parse_args()
+    with open(args.image, "rb") as f:
+        result = predict(f.read())
     if result:
         OUTPUT_DIR.mkdir(exist_ok=True)
         stem = Path(args.image).stem
