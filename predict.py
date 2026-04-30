@@ -40,9 +40,11 @@ GRADE_COLORS = [
 
 # ── Device detection ──────────────────────────────────────────────────────────
 def get_device() -> torch.device:
-    # TODO(human): detect and return the best available torch.device
-    # Check CUDA first, then Apple MPS, then fall back to CPU
-    pass
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 # ── Model loader ──────────────────────────────────────────────────────────────
