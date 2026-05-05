@@ -143,6 +143,23 @@ diabetic-retinopathy/
 ---
 
 
+## Model Performance
+
+Evaluated on the **IDRiD held-out test set** (78 images; 0 No DR, 1 Mild, 33 Moderate, 19 Severe, 25 Proliferative DR).
+
+| Metric | Value |
+|---|---|
+| Validation accuracy (training split) | **80.7 %** |
+| Weighted F1-score (test set) | 0.24 |
+| Referral sensitivity (Grade ≥ 2) | **64.9 %** |
+| Referral specificity | 100 % |
+
+> **Note on the test set:** IDRiD's official test split contains no Grade-0 and only one Grade-1 image, making aggregate accuracy an unreliable headline number. Per-class sensitivity — especially **Grade 4 (Proliferative DR)** — is the clinically critical figure; a missed PDR case is a preventable blindness event.
+
+Run `evaluate.py` on your own data split to obtain the full per-class breakdown (see below).
+
+---
+
 ## CLI Inference
 
 Run the model on a single image without the web UI:
@@ -152,6 +169,36 @@ python predict.py --image path/to/fundus.jpg
 ```
 
 Outputs grade, confidence, and referral decision to the console. Saves annotated image and Grad-CAM heatmap to `outputs/`.
+
+---
+
+## Model Evaluation
+
+Run the evaluation script against a labelled image set to reproduce or update the metrics above:
+
+```bash
+# IDRiD held-out test set
+python evaluate.py --data-dir data/raw/idrid --dataset idrid --split test
+
+# APTOS 2019 (class-folder layout)
+python evaluate.py --data-dir data/raw/aptos --dataset aptos
+
+# Custom folder layout (subfolders named 0–4)
+python evaluate.py --data-dir path/to/images --dataset folder
+```
+
+Results are saved to `evaluation/metrics.json` with a timestamp. The script reports:
+
+- Per-class accuracy, sensitivity (recall), and specificity
+- Macro-averaged AUC-ROC (one-vs-rest)
+- Weighted F1-score
+- Full 5 × 5 confusion matrix
+
+Download IDRiD or APTOS via:
+
+```bash
+python download_data.py   # requires a Kaggle API key in .env
+```
 
 ---
 
