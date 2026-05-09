@@ -1,0 +1,3 @@
+[server]
+# Suppress torch.classes path inspection warning via app.py logger config instead.
+# Keeping default watchdog watcher so hot-reload works normally.

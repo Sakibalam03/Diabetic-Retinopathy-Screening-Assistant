@@ -37,6 +37,32 @@ GRADE_COLORS = [
     (142, 68, 173),    # purple   — Proliferative DR
 ]
 
+UNCERTAINTY_THRESHOLD = 0.60   # flag if top-class probability is below this
+MARGIN_THRESHOLD      = 0.15   # flag if gap between top-2 probabilities is below this
+UNCERTAINTY_MSG = (
+    "Low confidence prediction. Image quality or presentation may be atypical. "
+    "Clinical review recommended regardless of grade."
+)
+
+
+# ── Uncertainty detection ─────────────────────────────────────────────────────
+def _flag_uncertainty(probs: list) -> tuple:
+    """
+    Return (uncertain: bool, message: str).
+    Flag uncertain when either:
+      - max(probs) < UNCERTAINTY_THRESHOLD  (low absolute confidence)
+      - top-1 minus top-2 probability < MARGIN_THRESHOLD  (ambiguous between grades)
+
+    `probs` is a list of 5 softmax probabilities summing to ~1.
+    Uses UNCERTAINTY_THRESHOLD and MARGIN_THRESHOLD defined above.
+    Returns (True, UNCERTAINTY_MSG) when uncertain, (False, "") otherwise.
+    """
+    sorted_probs = sorted(probs, reverse=True)
+    low_confidence = sorted_probs[0] < UNCERTAINTY_THRESHOLD
+    low_margin     = (sorted_probs[0] - sorted_probs[1]) < MARGIN_THRESHOLD
+    uncertain      = low_confidence or low_margin
+    return (True, UNCERTAINTY_MSG) if uncertain else (False, "")
+
 
 # ── Device detection ──────────────────────────────────────────────────────────
 def get_device() -> torch.device:
@@ -164,10 +190,11 @@ def predict(image_input: bytes | str) -> dict | None:
     h, w     = img.shape[:2]
     enhanced = enhance(img)
 
-    device            = get_device()
-    model             = load_grader(device)
-    grade, probs, cam = run_inference(model, pil_source, device)
-    referral          = grade >= 2
+    device                    = get_device()
+    model                     = load_grader(device)
+    grade, probs, cam         = run_inference(model, pil_source, device)
+    referral                  = grade >= 2
+    uncertain, uncertain_msg  = _flag_uncertainty(probs)
 
     # ── Print report ──────────────────────────────────────────────────────────
     print("\n" + "=" * 52)
@@ -201,14 +228,16 @@ def predict(image_input: bytes | str) -> dict | None:
                 (10, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
     return {
-        "grade":           grade,
-        "grade_name":      CLASS_NAMES[grade],
-        "confidence":      probs[grade],
-        "probs":           probs,
-        "referral":        referral,
-        "annotated_bytes": _encode_jpg(ann),
-        "heatmap_bytes":   _encode_jpg(hm_overlay),
-        "counts":          {},   # YOLO lesion counts not available in Grad-CAM mode
+        "grade":               grade,
+        "grade_name":          CLASS_NAMES[grade],
+        "confidence":          probs[grade],
+        "probs":               probs,
+        "referral":            referral,
+        "uncertain":           uncertain,
+        "uncertainty_message": uncertain_msg,
+        "annotated_bytes":     _encode_jpg(ann),
+        "heatmap_bytes":       _encode_jpg(hm_overlay),
+        "counts":              {},   # YOLO lesion counts not available in Grad-CAM mode
     }
 
 

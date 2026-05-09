@@ -8,7 +8,11 @@ Usage:
 
 import base64
 import io
+import logging
+import pandas as pd
 import streamlit as st
+
+logging.getLogger("streamlit.watcher.local_sources_watcher").setLevel(logging.ERROR)
 from datetime import datetime
 from fpdf import FPDF, XPos, YPos
 from PIL import Image
@@ -126,6 +130,17 @@ def generate_pdf(result: dict, patient_info: dict) -> bytes:
     pdf.set_text_color(*ref_color)
     pdf.cell(0, 7, _pdf_safe(f"Referral     : {ref_text}"), new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(0, 0, 0)
+
+    if result.get("uncertain"):
+        pdf.ln(2)
+        pdf.set_fill_color(255, 193, 7)      # amber header
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 7, "UNCERTAINTY NOTICE", new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.set_fill_color(255, 243, 205)    # light yellow body
+        pdf.set_font("Helvetica", "", 9)
+        pdf.multi_cell(0, 5, _pdf_safe(result["uncertainty_message"]), fill=True)
+
     pdf.ln(4)
 
     # Medical inferences
@@ -242,6 +257,10 @@ if uploaded:
         grade    = result["grade"]
         referral = result["referral"]
 
+        # ── Uncertainty warning ───────────────────────────────────────────────
+        if result.get("uncertain"):
+            st.warning(result["uncertainty_message"])
+
         # ── Summary metrics ───────────────────────────────────────────────────
         col1, col2, col3 = st.columns(3)
         col1.metric("DR Grade", f"{grade} — {result['grade_name']}")
@@ -259,6 +278,11 @@ if uploaded:
         st.subheader("Clinical Inferences")
         for inference in MEDICAL_INFERENCES.get(grade, []):
             st.markdown(f"- {inference}")
+
+        # ── Confidence distribution ───────────────────────────────────────────
+        st.subheader("Confidence Distribution")
+        prob_df = pd.DataFrame({"Probability": result["probs"]}, index=CLASS_NAMES)
+        st.bar_chart(prob_df)
 
         # ── Visualisations (from in-memory bytes) ─────────────────────────────
         img_col1, img_col2 = st.columns(2)
