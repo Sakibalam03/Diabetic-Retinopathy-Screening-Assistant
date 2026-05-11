@@ -7,8 +7,10 @@ Usage:
 """
 
 import base64
+import cv2
 import io
 import logging
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -16,7 +18,7 @@ logging.getLogger("streamlit.watcher.local_sources_watcher").setLevel(logging.ER
 from datetime import datetime
 from fpdf import FPDF, XPos, YPos
 from PIL import Image
-from predict import predict, get_device
+from predict import predict, get_device, validate_image_quality
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -141,6 +143,16 @@ def generate_pdf(result: dict, patient_info: dict) -> bytes:
         pdf.set_font("Helvetica", "", 9)
         pdf.multi_cell(0, 5, _pdf_safe(result["uncertainty_message"]), fill=True)
 
+    if result.get("quality_warning"):
+        pdf.ln(2)
+        pdf.set_fill_color(255, 193, 7)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 7, "IMAGE QUALITY NOTICE", new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.set_fill_color(255, 243, 205)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.multi_cell(0, 5, _pdf_safe(result["quality_warning"]), fill=True)
+
     pdf.ln(4)
 
     # Medical inferences
@@ -238,17 +250,33 @@ if uploaded:
 
     # Run inference only when a NEW file is uploaded (cache result by file_id)
     if st.session_state.get("file_id") != uploaded.file_id:
-        with st.spinner("Running DR screening pipeline..."):
-            try:
-                result = predict(raw_bytes)
-            except Exception as e:
-                st.error(f"Pipeline error: {e}")
-                result = None
+        st.session_state["file_id"] = uploaded.file_id
+        st.session_state.pop("result", None)
+        st.session_state.pop("validation_error", None)
 
-        if result:
-            result["raw_bytes"] = raw_bytes
-            st.session_state["file_id"]  = uploaded.file_id
-            st.session_state["result"]   = result
+        arr = np.frombuffer(raw_bytes, np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        valid_quality, quality_msg = validate_image_quality(img)
+
+        if not valid_quality:
+            st.session_state["validation_error"] = quality_msg
+        else:
+            with st.spinner("Running DR screening pipeline..."):
+                try:
+                    result = predict(raw_bytes)
+                except Exception as e:
+                    st.error(f"Pipeline error: {e}")
+                    result = None
+
+            if result:
+                result["raw_bytes"] = raw_bytes
+                if quality_msg and not result.get("quality_warning"):
+                    result["quality_warning"] = quality_msg
+                st.session_state["result"] = result
+
+    validation_error = st.session_state.get("validation_error")
+    if validation_error:
+        st.error(validation_error)
 
     # Use cached result for all subsequent reruns (sidebar edits, button clicks)
     result = st.session_state.get("result")
@@ -256,6 +284,9 @@ if uploaded:
     if result:
         grade    = result["grade"]
         referral = result["referral"]
+
+        if result.get("quality_warning"):
+            st.warning(result["quality_warning"])
 
         # ── Uncertainty warning ───────────────────────────────────────────────
         if result.get("uncertain"):

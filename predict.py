@@ -43,6 +43,12 @@ UNCERTAINTY_MSG = (
     "Low confidence prediction. Image quality or presentation may be atypical. "
     "Clinical review recommended regardless of grade."
 )
+MIN_IMAGE_DIMENSION = 224
+DARK_GREEN_MEAN_THRESHOLD = 30
+NON_FUNDUS_MSG = (
+    "Image does not resemble a standard fundus photograph. "
+    "Result is shown as a screening aid only; verify image type and quality before clinical use."
+)
 
 
 # ── Uncertainty detection ─────────────────────────────────────────────────────
@@ -106,6 +112,63 @@ def enhance(img: np.ndarray) -> np.ndarray:
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     b, g, r = cv2.split(img)
     return cv2.merge([b, clahe.apply(g), r])
+
+
+def validate_image_quality(img: np.ndarray) -> tuple[bool, str]:
+    """
+    Validate basic pre-inference image quality.
+
+    Returns (False, message) for hard failures and (True, message) for soft
+    warnings that should be shown before continuing with inference.
+    """
+    if img is None or not isinstance(img, np.ndarray) or img.ndim < 2:
+        return False, "Cannot read image. Please upload a valid image file."
+
+    h, w = img.shape[:2]
+    if h < MIN_IMAGE_DIMENSION or w < MIN_IMAGE_DIMENSION:
+        return (
+            False,
+            "Image resolution too low for reliable grading. Minimum 224x224 pixels required.",
+        )
+
+    enhanced = enhance(img)
+    mean_green = float(enhanced[:, :, 1].mean())
+    if mean_green < DARK_GREEN_MEAN_THRESHOLD:
+        return (
+            False,
+            "Image appears predominantly dark. Please upload a properly lit fundus photograph.",
+        )
+
+    gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY)
+    _, mask = cv2.threshold(gray, 30, 255, cv2.THRESH_BINARY)
+    mask = cv2.medianBlur(mask, 5)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return True, NON_FUNDUS_MSG
+
+    largest = max(contours, key=cv2.contourArea)
+    x, y, bw, bh = cv2.boundingRect(largest)
+    bbox_area = float(bw * bh)
+    contour_area = float(cv2.contourArea(largest))
+    circular_region_area = np.pi * (min(bw, bh) / 2.0) ** 2
+    circular_region_ratio = circular_region_area / bbox_area if bbox_area else 0.0
+    fill_ratio = contour_area / bbox_area if bbox_area else 0.0
+
+    border = max(1, min(h, w) // 20)
+    border_pixels = np.concatenate([
+        gray[:border, :].ravel(),
+        gray[-border:, :].ravel(),
+        gray[:, :border].ravel(),
+        gray[:, -border:].ravel(),
+    ])
+    dark_periphery = float(np.mean(border_pixels < 30)) > 0.55
+    poor_circular_fit = circular_region_ratio < 0.5 or fill_ratio < 0.5
+
+    if dark_periphery and poor_circular_fit:
+        return True, NON_FUNDUS_MSG
+
+    return True, ""
 
 
 # ── Grad-CAM ──────────────────────────────────────────────────────────────────
@@ -187,6 +250,13 @@ def predict(image_input: bytes | str) -> dict | None:
     if img is None:
         print("ERROR: Cannot read image")
         return None
+    valid_quality, quality_msg = validate_image_quality(img)
+    if not valid_quality:
+        print(f"ERROR: {quality_msg}")
+        return None
+    if quality_msg:
+        print(f"WARNING: {quality_msg}")
+
     h, w     = img.shape[:2]
     enhanced = enhance(img)
 
@@ -235,6 +305,7 @@ def predict(image_input: bytes | str) -> dict | None:
         "referral":            referral,
         "uncertain":           uncertain,
         "uncertainty_message": uncertain_msg,
+        "quality_warning":     quality_msg,
         "annotated_bytes":     _encode_jpg(ann),
         "heatmap_bytes":       _encode_jpg(hm_overlay),
         "counts":              {},   # YOLO lesion counts not available in Grad-CAM mode
